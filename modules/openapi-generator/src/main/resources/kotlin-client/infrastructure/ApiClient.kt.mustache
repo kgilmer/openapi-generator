@@ -1,6 +1,8 @@
 package {{packageName}}.infrastructure
 
+import com.squareup.moshi.JsonWriter
 import okhttp3.*
+import okio.Buffer
 import java.io.File
 
 open class ApiClient(val baseUrl: String) {
@@ -40,9 +42,13 @@ open class ApiClient(val baseUrl: String) {
                  }
                  builder.build()
              }
-             mediaType == JsonMediaType -> RequestBody.create(
-                 MediaType.parse(mediaType), Serializer.moshi.adapter(T::class.java).toJson(content)
-             )
+             mediaType == JsonMediaType -> {
+                val contentBuffer = Buffer()
+                val jsonWriter = JsonWriter.of(contentBuffer)
+                jsonWriter.serializeNulls = false
+                Serializer.moshi.adapter(T::class.java).toJson(jsonWriter, content)
+                RequestBody.create(MediaType.parse(mediaType), contentBuffer.readByteArray().toString())
+             }
              mediaType == XmlMediaType -> TODO("xml not currently supported.")
              // TODO: this should be extended with other serializers
              else -> TODO("requestBody currently only supports JSON body and File body.")
@@ -82,9 +88,8 @@ open class ApiClient(val baseUrl: String) {
         // TODO: support multiple contentType,accept options here.
         val contentType = (headers[ContentType] as String).substringBefore(";").toLowerCase()
         val accept = (headers[Accept] as String).substringBefore(";").toLowerCase()
-
         var request : Request.Builder =  when (requestConfig.method) {
-            RequestMethod.DELETE -> Request.Builder().url(url).delete()
+            RequestMethod.DELETE -> Request.Builder().url(url).delete(requestBody(body, contentType))
             RequestMethod.GET -> Request.Builder().url(url)
             RequestMethod.HEAD -> Request.Builder().url(url).head()
             RequestMethod.PATCH -> Request.Builder().url(url).patch(requestBody(body, contentType))
